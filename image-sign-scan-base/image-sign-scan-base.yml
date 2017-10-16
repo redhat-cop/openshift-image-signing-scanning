@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: sign-image-template
+  annotations:
+    openshift.io/display-name: Image Signing and Scanning Base
+    description: Template to create a base image for signing and scanning images
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    name: ${NAME}
+    namespace: "${NAMESPACE}"
+  spec:
+    lookupPolicy:
+      local: true
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    name: ${NAME}
+    namespace: "${NAMESPACE}"
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${NAME}:latest
+    source:
+      dockerfile: |
+        FROM registry.access.redhat.com/rhel7/rhel
+
+        MAINTAINER Andrew Block <ablock@redhat.com>
+
+        RUN rpm -ihv https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
+            yum repolist > /dev/null && \
+            yum clean all && \
+            INSTALL_PKGS="docker atomic jq atomic-openshift-clients" && \
+            yum install -y --enablerepo=rhel-7-server-ose-${OCP_VERSION}-rpms --enablerepo=rhel-7-server-extras-rpms --setopt=tsflags=nodocs $INSTALL_PKGS && \
+            rpm -V $INSTALL_PKGS && \
+            yum clean all
+      type: Dockerfile
+    strategy:
+      dockerStrategy:
+        env:
+        - name: OCP_VERSION
+          value: "${VERSION}"
+        from:
+          kind: DockerImage
+          name: rhel7/rhel
+      type: Docker
+    triggers:
+    - type: ConfigChange
+parameters:
+- name: NAME
+  displayName: Name
+  description: Name Applied to the Resulting ImageStream and BuildConfig
+  value: image-sign-scan-base
+  required: true
+- name: VERSION
+  displayName: OpenShift Container Platform Version
+  description: Version of the OpenShift Container Platform
+  value: "3.6"
+  required: true
+- name: NAMESPACE
+  displayName: Namespace
+  description: Namespace Containing Resources
+  value: openshift-infra

@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: sign-image-template
+  annotations:
+    openshift.io/display-name: Sign Image
+    description: Template to create a Job to Sign an Image
+objects:
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    name: "sign-image-${UNIQUE_VALUE}"
+    namespace: "${NAMESPACE}"
+  spec:
+    parallelism: 1
+    completions: 1
+    template:  
+      metadata:
+        name: "sign-image-${UNIQUE_VALUE}"
+      spec:
+        containers:
+        - env:
+            - name: IMAGE
+              value: ${IMAGE_TO_SIGN}
+            - name: SIGNBY
+              value: ${SIGN_BY}
+          name: sign-image
+          image: image-sign-scan-base
+          command:
+            - "/bin/bash"
+            - "-c"
+            - >
+              oc login https://kubernetes.default.svc.cluster.local --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) > /dev/null 2>&1 
+  
+              SA_FULLNAME=$(oc whoami)
+
+              SA_NAME="${SA_FULLNAME##*:}"
+
+              NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+              SA_JSON=$(oc get sa -n $NAMESPACE $SA_NAME -o json)
+
+              DOCKERCFG_SECRET_NAME=$(echo "${SA_JSON}" | jq -r ".imagePullSecrets[] | select( .name | contains(\"${SA_NAME}-dockercfg\")).name")
+
+              DOCKERCFG=$(oc get secret -n $NAMESPACE $DOCKERCFG_SECRET_NAME -o json | jq -r ".data[] | select(\".dockercfg\")" | base64 -d)
+
+              if [ -z ${IMAGE} ]; then
+                echo "No Image Specified for Signing"
+                exit 1
+              fi
+
+              REGISTRY_HOST=${IMAGE%%/*}
+              REGISTRY_CONTENTS=$(echo "$DOCKERCFG" | jq -r ". | .[\"$REGISTRY_HOST\"]")
+
+              if [ "$REGISTRY_CONTENTS" != "null" ]; then
+
+                USERNAME=$(echo $REGISTRY_CONTENTS | jq -r .username)
+                PASSWORD=$(echo $REGISTRY_CONTENTS | jq -r .password)
+
+                USERNAME_PARAM="--username $USERNAME"
+                PASSWORD_PARAM="--password $PASSWORD"
+
+              fi
+
+              atomic push --insecure --type atomic --sign-by $SIGNBY $USERNAME_PARAM $PASSWORD_PARAM $IMAGE
+
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - mountPath: /var/run/docker.sock
+              name: docker-socket
+            - mountPath: /root/.gnupg
+              name: gpg
+        volumes:
+          - name: gpg
+            secret:
+              secretName: ${GPG_SECRET}
+          - hostPath:
+              path: /var/run/docker.sock
+            name: docker-socket
+        restartPolicy: OnFailure
+        serviceAccount: ${SERVICE_ACCOUNT_NAME}
+parameters:
+- name: SERVICE_ACCOUNT_NAME
+  displayName: Service Account Name
+  description: Name of the service account to Run the Job As
+  value: imagemanager
+  required: true
+- name: NAMESPACE
+  displayName: Namespace
+  description: Namespace to Run the Job Within
+  value: openshift-infra
+  required: true
+- name: IMAGE_TO_SIGN
+  displayName: Image to Sign
+  description: Image to Sign
+  required: true
+- name: SIGN_BY
+  displayName: Sign By
+  description: Identity of the Signer
+  required: true
+- name: GPG_SECRET
+  displayName: GPG Secret
+  description: Name of the Secret Containing GPG Keys
+  required: true
+- name: UNIQUE_VALUE  
+  generate: expression
+  from: "[a-z0-9]{5}"
+  required: true
