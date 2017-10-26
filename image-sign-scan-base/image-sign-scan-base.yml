@@ -63,4 +63,4 @@ parameters:
 - name: NAMESPACE
   displayName: Namespace
   description: Namespace Containing Resources
-  value: openshift-infra
+  value: image-signer

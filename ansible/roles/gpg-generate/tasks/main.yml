@@ -1,0 +1,118 @@
+---
+
+- include: epel.yml
+
+- name: Install GPG Dependencies
+  become: true
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - gnupg2
+    - rng-tools
+    - haveged
+- name: Enable haveged
+  become: true
+  service:
+    name: haveged
+    state: started
+- name: Create GPG Home Directory
+  file:
+    state: directory
+    mode: 0700
+    dest: "{{ gpg_home }}/.gnupg"
+
+- name: Set gpg pinentry mode to loopback in config file.
+  lineinfile:
+    dest: "{{ gpg_home }}/.gnupg/gpg.conf"
+    line: "{{ item.line }}"
+    regexp: "{{ item.regexp }}"
+    mode: 0600
+    create: yes
+  with_items:
+    - line: "use-agent"
+      regexp: "^use-agent"
+    - line: "pinentry-mode loopback"
+      regexp: "^pinentry-mode"
+
+- name: Set gpg-agent config file to allow loopback pinentry.
+  lineinfile:
+    dest: "{{ gpg_home }}/.gnupg/gpg-agent.conf"
+    line: "{{ item.line }}"
+    regexp: "{{ item.regexp }}"
+    mode: 0600
+    create: yes
+  with_items:
+    - line: "allow-loopback-pinentry"
+      regexp: "^allow-loopback-pinentry"
+
+- name: Copy GPG Configuration File
+  copy:
+   src: gpg.conf
+   dest: "{{ gpg_home }}/.gnupg/gpg.conf"
+   mode: 0600
+
+- name: Generate GPG Template
+  template:
+    src: gpg-generate.j2
+    dest: "{{ gpg_home }}/gen-key-script-openshift"
+    mode: 0600
+
+
+- name: Check existing secret key
+  shell: "gpg2 --list-secret-keys | grep '{{ gpg_key_gen_uid }}'"
+  environment:
+    GNUPGHOME: "{{ gpg_home }}/.gnupg"
+  changed_when: false
+  ignore_errors: true
+  register: gpgkeys
+
+- name: Generate gpg key
+  command: "gpg2 --batch --gen-key {{ gpg_home }}/gen-key-script-openshift chdir={{ gpg_home }}"
+  environment:
+    GNUPGHOME: "{{ gpg_home }}/.gnupg"
+  when: gpgkeys is defined and gpgkeys.stdout == ""
+  register: genkey
+
+- name: Export Public Key
+  command: "gpg2 --batch --yes --armor --export --output {{ gpg_home }}/{{ gpg_key_gen_user_email }} {{ gpg_key_gen_user_email }} chdir={{ gpg_home }}"
+  environment:
+    GNUPGHOME: "{{ gpg_home }}/.gnupg"
+
+- name: Delete local folder
+  delegate_to: localhost
+  file:
+    state: absent
+    path: "{{ gpg_local_base_dir }}"
+  
+- name: Create Local Folders for GPG Content
+  delegate_to: localhost
+  file:
+    state: directory
+    path: "{{ item }}"
+  with_items:
+    - "{{ gpg_core_files_dir }}"
+    - "{{ gpg_publickey_dir }}"
+
+- name: Fetch GPG Files
+  fetch:
+    src: "{{ item }}"
+    dest: "{{ gpg_core_files_dir }}/"
+    flat: true
+  with_items:
+    - "{{ gpg_home }}/.gnupg/pubring.gpg"
+    - "{{ gpg_home }}/.gnupg/secring.gpg"
+    - "{{ gpg_home }}/.gnupg/trustdb.gpg"
+  
+- name: Fetch GPG Public Key
+  fetch:
+    src: "{{ item }}"
+    dest: "{{ gpg_publickey_dir }}/"
+    flat: true
+  with_items:
+    - "{{ gpg_home }}/{{ gpg_key_gen_user_email }}"
+
+- name: Delete GPG Directory
+  file:
+    state: absent
+    path: "{{ gpg_home }}"

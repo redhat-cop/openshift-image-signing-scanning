@@ -1,0 +1,39 @@
+---
+
+- name: Install Atomic CLI
+  become: true
+  yum:
+    state: latest
+    name: "{{ item }}"
+  with_items:
+    - atomic
+
+- name: Copy Public Key
+  become: true
+  copy:
+    src: "{{ local_gpg_publickey }}"
+    dest: "{{ containers_public_key_dir }}/"
+
+- name: Configure Atomic Trust
+  become: true
+  command: "{{ item }}"
+  with_items:
+    - "atomic --assumeyes trust default reject"
+    - "atomic --assumeyes trust add --sigstoretype web --sigstore https://access.redhat.com/webassets/docker/content/sigstore --pubkeys /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release registry.access.redhat.com"
+    - "atomic --assumeyes trust add --pubkeys {{ containers_public_key_dir }}/{{ gpg_publickey_file }} {{ ocp_registry }}"
+    - "atomic --assumeyes trust add --sigstoretype atomic --pubkeys {{ containers_public_key_dir }}/{{ gpg_publickey_file }} {{ ocp_registry }}"
+
+- name: Configure Docker Dameon for Image Signatures
+  become: true
+  lineinfile:
+    dest: /etc/sysconfig/docker
+    regexp: ^OPTIONS=.*
+    line: "OPTIONS=' --selinux-enabled --log-driver=journald --signature-verification=true'"
+  register: docker_image_signatures
+
+- name: Restart Docker Service
+  become: true
+  service:
+    name: docker
+    state: restarted
+  when: docker_image_signatures.changed

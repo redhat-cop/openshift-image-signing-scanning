@@ -1,0 +1,23 @@
+---
+
+epel_repo_url: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
+epel_repo_gpg_key_url: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_distribution_major_version }}"
+epel_repofile_path: "/etc/yum.repos.d/epel.repo"
+
+# Create a custom GPG Directory
+gpg_home: ~/.gnupg-openshift
+
+gpg_key_gen_user_name: openshift
+gpg_key_gen_user_email: openshift@example.com
+gpg_key_gen_type: 1
+gpg_key_gen_length: 2048
+gpg_key_gen_expire_date: 0
+gpg_key_gen_passphrase: "{{ lookup('password', '/tmp/passwordfile') }}"
+gpg_key_gen_passphrase_enable: false
+gpg_key_gen_uid: "{{ gpg_key_gen_user_name }} <{{ gpg_key_gen_user_email }}>"
+gpg_key_gen_path: "{{ gpg_key_gen_uid | hash('md5') }}"
+
+# Directory to Fetch Generated Files Locally
+gpg_local_base_dir: "{{ playbook_dir }}/gpg_remote"
+gpg_core_files_dir: "{{ gpg_local_base_dir }}/gpg_config"
+gpg_publickey_dir: "{{ gpg_local_base_dir }}/public_key"

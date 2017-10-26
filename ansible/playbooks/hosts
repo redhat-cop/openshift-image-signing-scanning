@@ -1,0 +1,8 @@
+# Machine responsible for generating GPG key (Only First machine will be used)
+[gpg]
+
+Dedicated OpenShift nodes for signing images
+[image_signers]
+
+All OpenShift Nodes in the cluster
+[nodes]

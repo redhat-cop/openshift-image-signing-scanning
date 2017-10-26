@@ -1,0 +1,11 @@
+%echo Generating a basic OpenPGP key
+Key-Type: 1
+Key-Length: {{ gpg_key_gen_length }}
+Name-Real: {{ gpg_key_gen_user_name }}
+Name-Email: {{ gpg_key_gen_user_email }}
+Expire-Date: {{ gpg_key_gen_expire_date }}
+{% if gpg_key_gen_passphrase_enable is defined and gpg_key_gen_passphrase_enable %}
+Passphrase: {{ gpg_key_gen_passphrase }}
+{% endif %}
+%commit
+%echo done

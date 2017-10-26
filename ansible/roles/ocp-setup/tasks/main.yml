@@ -1,0 +1,67 @@
+---
+
+- name: Copy GPG Files
+  copy:
+    src: "{{ gpg_core_files_dir }}/"
+    dest: "{{ gpg_core_files_remote_dir }}"
+
+- name: Check if Project Exists
+  command: >
+    oc get project {{ openshift_signer_project_name }}
+  ignore_errors: true
+  register: signer_project_exists
+
+- name: Create OpenShift Project
+  command: >
+    oc adm new-project {{ openshift_signer_project_name }} --display-name="{{ openshift_signer_project_display_name }}"
+  when: signer_project_exists.rc != 0
+
+- name: Label Image Signer Nodes
+  command: >
+    oc label node {{ item }} {{ openshift_signer_node_label }} --overwrite=true
+  with_items: "{{ groups[ image_signer_hostgroup ] }}"
+
+- name: Taint Image Signer Nodes
+  command: >
+    oc adm taint nodes {{ item }} {{ openshift_signer_node_taint }} --overwrite=true
+  with_items: "{{ groups[ image_signer_hostgroup ] }}"
+
+- name: Check if GPG Secret Exists
+  command: >
+    oc get secret {{ openshift_signer_gpg_secret_name }} -n {{ openshift_signer_project_name }}
+  ignore_errors: yes
+  register: signer_secret_exists
+
+- name: Delete GPG Secret
+  command: >
+    oc delete secret {{ openshift_signer_gpg_secret_name }} -n {{ openshift_signer_project_name }}
+  when: signer_secret_exists.rc == 0
+
+- name: Create GPG Secret
+  command: >
+    oc secret new {{ openshift_signer_gpg_secret_name }} {{ gpg_core_files_remote_dir }} -n {{ openshift_signer_project_name }}
+
+- name: Copy OpenShift Configurations
+  copy:
+    src: "{{ item }}"
+    dest: "{{ openshift_configs_dest_dir }}/"
+  with_items: "{{ openshift_configs }}"
+
+- name: Configure Privileged SCC
+  command: >
+    oc adm policy add-scc-to-user privileged  -n {{ openshift_signer_project_name }} -z {{ openshift_signer_sa_name }}
+
+- name: Instantiate OpenShift Templates
+  shell: "{{ item }}"
+  with_items:
+    - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -p SERVICE_ACCOUNT_NAME={{ openshift_signer_sa_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_policy_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
+    - "oc apply -n {{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_template }}"
+    - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_base_scan_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
+
+- name: Remove Configuration Directories
+  file:
+    state: absent
+    path: "{{ item }}"
+  with_items:
+    - "{{ gpg_core_files_remote_dir }}"
+    - "{{ openshift_configs_dest_dir }}"

@@ -59,9 +59,15 @@ objects:
                 USERNAME_PARAM="--username $USERNAME"
                 PASSWORD_PARAM="--password $PASSWORD"
 
+                docker login -u $USERNAME -p $PASSWORD $REGISTRY_HOST
+
               fi
 
+              docker pull $IMAGE
+
               atomic push --insecure --type atomic --sign-by $SIGNBY $USERNAME_PARAM $PASSWORD_PARAM $IMAGE
+
+              docker rmi -f $IMAGE
 
           securityContext:
             privileged: true
@@ -78,7 +84,14 @@ objects:
               path: /var/run/docker.sock
             name: docker-socket
         restartPolicy: OnFailure
+        nodeSelector:
+          ${NODE_SELECTOR_KEY}: ${NODE_SELECTOR_VALUE}
         serviceAccount: ${SERVICE_ACCOUNT_NAME}
+        tolerations:
+        - key: image_signer
+          operator: Equal
+          value: "true"
+          effect: NoExecute
 parameters:
 - name: SERVICE_ACCOUNT_NAME
   displayName: Service Account Name
@@ -88,7 +101,7 @@ parameters:
 - name: NAMESPACE
   displayName: Namespace
   description: Namespace to Run the Job Within
-  value: openshift-infra
+  value: image-signer
   required: true
 - name: IMAGE_TO_SIGN
   displayName: Image to Sign
@@ -101,6 +114,16 @@ parameters:
 - name: GPG_SECRET
   displayName: GPG Secret
   description: Name of the Secret Containing GPG Keys
+  required: true
+- name: NODE_SELECTOR_KEY
+  displayName: Node Selector Key
+  description: Node Selector Key for the Job
+  value: "image_signer"
+  required: true
+- name: NODE_SELECTOR_VALUE
+  displayName: Node Selector Value
+  description: Node Selector Value for the Job
+  value: "true"
   required: true
 - name: UNIQUE_VALUE  
   generate: expression

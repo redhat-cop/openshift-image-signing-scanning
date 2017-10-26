@@ -1,0 +1,7 @@
+---
+
+gpg_publickey_file: "openshift@example.com"
+local_gpg_publickey: "{{ playbook_dir }}/gpg_remote/public_key/{{ gpg_publickey_file }}"
+ocp_registry: docker-registry.default.svc:5000
+containers_public_key_dir: /etc/pki/containers
+

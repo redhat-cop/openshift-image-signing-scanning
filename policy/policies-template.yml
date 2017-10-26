@@ -7,6 +7,20 @@ metadata:
     description: Template to create a service account
 objects:
 - apiVersion: v1
+  kind: ClusterRole
+  metadata:
+    creationTimestamp: null
+    name: signature-viewer
+  rules:
+  - apiGroups:
+    - image.openshift.io
+    - ""
+    attributeRestrictions: null
+    resources:
+    - imagestreamimages
+    verbs:
+    - get
+- apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: "${SERVICE_ACCOUNT_NAME}"
@@ -30,5 +44,5 @@ parameters:
 - name: NAMESPACE
   displayName: Namespace
   description: Namespace Containing Resources
-  value: openshift-infra
+  value: image-signer
   required: true

@@ -7,83 +7,94 @@ _This repository is currently undergoing active development. Functionality may b
 
 The OpenShift Container Platform ecosystem contains mechanisms for securely managing container images. This includes but is not limited to [image signing](https://docs.openshift.com/container-platform/3.6/admin_guide/image_signatures.html) and [image scanning](https://docs.openshift.com/container-platform/3.6/security/container_content.html#security-content-scanning).
 
-The goal of this repository is to contain tools necessary to perform these taks within OpenShift. 
-
-## Prerequisites
-
-To facilitate image signing and scanning, the following prerequisite sections must be completed.
-
-### Create a GPG Keypair
-
-A GPG Keypair is required in order to sign and validate images. Execute the following command to create a new keypair:
-
-```
-gpg2 --gen-key
-```
-
-**Note: Only keys without a passphrase are currently supported.**
-
-Make a note of the location of the key pair as it will be needed in subsequent steps.
-
-## Base Infrastructure
-
-Several steps must be completed in order to satisfied the necessary access and permissions within the OpenShift cluster. By default, the infrastructure components are designed to run within the _openshift-infra_ project. Templates are available that allow the destination to be customized if necessary. 
-
-A user with `cluster-admin` privileges must be used to configure the base infrastructure components as they modify cluster level resources.
-
-Create a new service account and assign it _cluster-admin_ privileges along with adding it to the _privileged_ SCC. 
-
-```
-oc process -f policy/sa-rolebinding-template.yml | oc apply -f-
-oc adm policy add-scc-to-user privileged  -n openshift-infra -z imagemanager
-```
- 
-
-## Base Image
-
-Image signing and image scanning actions each utilizes the [Atomic Command Line Tool](https://github.com/projectatomic/atomic). To support running within OpenShift, a base container is available within the [image-sign-scan-base](image-sign-scan-base) folder.
-
-To process and instantiate the template the base image components, execute the following command:
-
-```
-oc process -f image-sign-scan-base/image-sign-scan-base.yml | oc apply -f-
-```
-
-A new image will be created as a foundational component for subsequent sections 
+A set of Ansible tools is available to aid in the automation and configuration of the target environment.
 
 ## Image Signing
 
-This section describes how to setup an OpenShift environment to support the signing of images
+Image signing is a way to apply a digital signature to a container image. This guide describes how an automated process ca be created an implemented within OpenShift. The goal is to produce an environment that allows for only the execution of signed images from trusted sources (Red Hat Container Catalog [RHCC]) along with assets that are created within an organization or group.  
 
-### Add GPG Secret
+## Architecture
 
-To support image signing, a GPG key pair was previously created. The files produced will be used in an Secret and injected into the signing process.
+_Diagram Coming Soon_
 
-Either reference the folder containing the GPG components or copy the files to a new directory. Execute the following command to create the secret:
+The signing architecture utilizes a typical OpenShift environment by specifying dedicated nodes for performing image signing actions. The key difference between image signing nodes and the rest of the nodes in the environment is relaxing the image requirement policies to allow for signing actions to occur on these nodes. 
+
+Two ways to ensure only image signing workloads are scheduled onto these dedicated nodes is through [Node Selectors](https://docs.openshift.com/container-platform/latest/admin_guide/scheduling/node_selector.html#admin-guide-sched-selector-config) placed on image signing resources and [tainting](https://docs.openshift.com/container-platform/latest/admin_guide/scheduling/taints_tolerations.html) image signing nodes. Image signing resources, such as jobs, are configured with tolerations to allow execution on the tainted nodes.
+
+## Setup and Configuration
+
+A set of Ansible playbooks and roles is available to automate the configuration of an environment to sign and allow exclusive access to only signed images. The following actions are performed in the automation tooling:
+
+* Creation of GPG keys
+* Configuration of OpenShift host machines to enable signature verification along with trusted sources
+* Deployment of OpenShift cluster resources to host image signing resources
+
+### Ansible Automation
+
+
+#### Inventory File Configuration
+
+The inventory file is broken down into 3 (three) host groups:
+
+* gpg - Machine responsible for creating GPG keys
+* image_signers - OpenShift nodes responsible for signing images
+* nodes - All OpenShift nodes
+
+#### Playbook Execution
+
+The OpenShift environment can be configured by executing the `image-signing-setup.yml` playbook in the `ansible/playbooks` folder.
+
+Execute the following command from within the _playbooks_ directory to initiate the setup:
 
 ```
-oc secrets new gpg <folder_containing_resources>
+ansible-playbook -i hosts image-signing-setup.yml
 ```
+
+Once the playbook completes, the OpenShift environment will be configured to handle image signing and execution.
+
+## Testing the Architecture
+
+Login to the cluster and create a new project:
+
+```
+oc new-project project
+```
+
+Verifying a signed image requires additional permissions than what is created  for the default service. As part of the Ansible automation, a custom ClusterRole called `signature-viewer` was created with the necessary permissions. 
+
+Execute the following command to add the cluster role to the service account:
+
+```
+oc adm policy add-cluster-role-to-user signature-viewer system:serviceaccount:<project>:default
+```
+
+Execute the build of the image. Once the build completes, a job can be created to sign the image as outlined in the subsequent section.
 
 ### Create a job to Sign an Image
 
-A template to create a job is available to sign an image within the OpenShift registry and available in the _sign-image_ folder.
+Since the environment has been configured to only allow signed images to run, the image previously created in the prior section must be signed before it is allowed to run. 
+
+A template was created in the `image-signer` project as part of the Ansible provisioning that will create a job to sign the image that is stored the OpenShift registry.
 
 The template requires the following parameters:
 
 |Template Parameter|Description|Default Value|
 |--------------------------|----------------|-----------------|
 |SERVICE_ACCOUNT_NAME|Name of the Service Account to use|imagemanager|
-|NAMESPACE|Namespace in which to create the job|openshift-infra|
+|NAMESPACE|Namespace in which to create the job|image-signer|
 |IMAGE_TO_SIGN|Image location (Ex: _docker-registry.default.svc:5000/test-project/test-image:latest_)| |
 |SIGN_BY|Identity of the signer| |
-|GPG_SECRET| Name of the secret containing the GPG keypair| |
+|GPG_SECRET| Name of the secret containing the GPG keypair| gpg |
+|NODE_SELECTOR_KEY| Node selector key | image_signer |
+|NODE_SELECTOR_VALUE| Node selector value | true |
 
 Instantiate the template
 
 ```
-oc process -p <param>... -f sign-image/sign-image-template.yml | oc apply -f-
+oc new-app -n image-signer --template=sign-image-template -p <params>
 ```
+
+The image will be signed and pushed back to the OpenShift Registry where it can now be run within the cluster.
 
 ## Image Scanning
 

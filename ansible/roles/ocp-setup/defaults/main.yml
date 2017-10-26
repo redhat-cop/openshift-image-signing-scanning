@@ -1,0 +1,22 @@
+---
+
+gpg_core_files_dir: "{{ playbook_dir }}/gpg_remote/gpg_config"
+gpg_core_files_remote_dir: "~/.gpg-openshift"
+openshift_signer_project_name: image-signer
+openshift_signer_project_display_name: Image Signer
+openshift_signer_node_label: "image_signer=true"
+openshift_signer_node_taint: "image_signer=true:NoExecute"
+openshift_signer_gpg_secret_name: gpg
+openshift_signer_sa_name: imagemanager
+
+image_signer_hostgroup: image_signers
+
+openshift_configs_dest_dir: "~/ocp-configs"
+openshift_base_scan_template: image-sign-scan-base.yml
+openshift_policy_template: policies-template.yml
+openshift_sign_image_template: sign-image-template.yml
+
+openshift_configs:
+  - "{{ role_path }}/../../../policy/{{ openshift_policy_template }}"
+  - "{{ role_path }}/../../../image-sign-scan-base/{{ openshift_base_scan_template }}"
+  - "{{ role_path }}/../../../sign-image/{{ openshift_sign_image_template }}"
