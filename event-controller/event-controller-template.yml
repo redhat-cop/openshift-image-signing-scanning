@@ -1,0 +1,182 @@
+apiVersion: v1
+kind: Template
+labels:
+  template: event-controller
+metadata:
+  annotations:
+  name: event-controller
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      template: ${APPLICATION_NAME}
+    name: python-35-rhel7
+  spec:
+    tags:
+    - annotations:
+        openshift.io/imported-from: registry.access.redhat.com/rhscl/python-35-rhel7
+      from:
+        kind: DockerImage
+        name: registry.access.redhat.com/rhscl/python-35-rhel7
+      generation: 2
+      importPolicy: {}
+      name: latest
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      template: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    lookupPolicy:
+      local: true
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    annotations:
+    labels:
+      template: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APPLICATION_NAME}:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      type: Git
+      git:
+        uri: ${SOURCE_CODE_URL}
+        ref: ${SOURCE_CODE_REF}
+      contextDir: ${SOURCE_CODE_CONTEXT_DIR}
+    strategy:
+      dockerStrategy:
+        from:
+          kind: ImageStreamTag
+          name: python-35-rhel7:latest
+      type: Docker
+    triggers:
+    - type: ConfigChange
+- apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    labels:
+      template: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: ${APPLICATION_NAME}
+        deploymentconfig: ${APPLICATION_NAME}
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        annotations:
+        labels:
+          app: ${APPLICATION_NAME}
+          deploymentconfig: ${APPLICATION_NAME}
+      spec:
+        volumes:
+        - name: config-volume
+          configMap:
+            name: ${APPLICATION_NAME}
+        containers:
+        - env:
+          - name: CONFIG_FILE
+            value: /etc/config/config.ini
+          image: ${APPLICATION_NAME}
+          imagePullPolicy: Always
+          name: ${APPLICATION_NAME}
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+          - name: config-volume
+            mountPath: /etc/config
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        serviceAccountName: ${APPLICATION_NAME}
+        securityContext: {}
+        terminationGracePeriodSeconds: 10
+        nodeSelector:
+          ${NODE_SELECTOR_KEY}: ${NODE_SELECTOR_VALUE}
+        tolerations:
+        - key: image_signer
+          operator: Equal
+          value: "true"
+          effect: NoExecute
+    test: false
+- apiVersion: v1
+  data:
+    config.ini: |
+      [global]
+      k8s_resource=images
+      k8s_api_version=v1
+      k8s_api_group=oapi
+      watcher_plugin=imagesigner
+
+      [plugin_imagesigner]
+      registries=docker-registry.default.svc:5000
+      template_name=sign-image-template
+      signer_identity=openshift@example.com
+  kind: ConfigMap
+  metadata:
+    name: ${APPLICATION_NAME}
+  labels:
+    template: ${APPLICATION_NAME}
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    labels:
+      template: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+- apiVersion: v1
+  groupNames: null
+  kind: ClusterRoleBinding
+  metadata:
+    labels:
+      template: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}_cluster-admin
+  roleRef:
+    name: cluster-admin
+  subjects:
+  - kind: ServiceAccount
+    name: ${APPLICATION_NAME}
+    namespace: ${NAMESPACE}
+parameters:
+- description: The name for the application.
+  name: APPLICATION_NAME
+  required: true
+  value: event-controller
+- description: Source code repo URL
+  name: SOURCE_CODE_URL
+  required: true
+  value: https://github.com/sabre1041/openshift-event-controller.git
+- description: Source code branch
+  name: SOURCE_CODE_REF
+  required: true
+  value: feature/imagesigner
+- description: Directory in your source code repo
+  name: SOURCE_CODE_CONTEXT_DIR
+  required: false
+- name: NAMESPACE
+  displayName: Namespace
+  description: Namespace Containing Resources
+  value: image-signer
+- name: NODE_SELECTOR_KEY
+  displayName: Node Selector Key
+  description: Node Selector Key for the Job
+  value: "image_signer"
+  required: true
+- name: NODE_SELECTOR_VALUE
+  displayName: Node Selector Value
+  description: Node Selector Value for the Job
+  value: "true"
+  required: true

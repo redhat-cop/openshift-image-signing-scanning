@@ -22,6 +22,8 @@ objects:
         - env:
             - name: IMAGE
               value: ${IMAGE_TO_SIGN}
+            - name: DIGEST
+              value: ${IMAGE_DIGEST}
             - name: SIGNBY
               value: ${SIGN_BY}
           name: sign-image
@@ -31,7 +33,14 @@ objects:
             - "-c"
             - >
               oc login https://kubernetes.default.svc.cluster.local --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) > /dev/null 2>&1 
-  
+
+              IMAGE_SIGNATURE_EXISTS=$(oc get images ${IMAGE_DIGEST} -o json | jq -r 'has("signatures")')
+
+              if [ "${IMAGE_SIGNATURE_EXISTS}" == "true" ]; then
+                echo "Signature exists on image. Skipping signing"
+                exit 0
+              fi
+
               SA_FULLNAME=$(oc whoami)
 
               SA_NAME="${SA_FULLNAME##*:}"
@@ -107,6 +116,10 @@ parameters:
   displayName: Image to Sign
   description: Image to Sign
   required: true
+- name: IMAGE_DIGEST
+  displayName: Image Digest
+  description: Image Digest
+  required: true
 - name: SIGN_BY
   displayName: Sign By
   description: Identity of the Signer
@@ -114,6 +127,7 @@ parameters:
 - name: GPG_SECRET
   displayName: GPG Secret
   description: Name of the Secret Containing GPG Keys
+  value: "gpg"
   required: true
 - name: NODE_SELECTOR_KEY
   displayName: Node Selector Key

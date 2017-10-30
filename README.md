@@ -83,6 +83,7 @@ The template requires the following parameters:
 |SERVICE_ACCOUNT_NAME|Name of the Service Account to use|imagemanager|
 |NAMESPACE|Namespace in which to create the job|image-signer|
 |IMAGE_TO_SIGN|Image location (Ex: _docker-registry.default.svc:5000/test-project/test-image:latest_)| |
+|IMAGE_DIGEST|Image digest (Ex: sha256:43bf6f9ad59fe24e72bff8f2e7427639c034026d6ba43d37651d07812266e99a)| |
 |SIGN_BY|Identity of the signer| |
 |GPG_SECRET| Name of the secret containing the GPG keypair| gpg |
 |NODE_SELECTOR_KEY| Node selector key | image_signer |

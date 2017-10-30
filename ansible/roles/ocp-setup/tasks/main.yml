@@ -57,6 +57,7 @@
     - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -p SERVICE_ACCOUNT_NAME={{ openshift_signer_sa_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_policy_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
     - "oc apply -n {{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_template }}"
     - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_base_scan_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
+    - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_event_controller_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
 
 - name: Remove Configuration Directories
   file:

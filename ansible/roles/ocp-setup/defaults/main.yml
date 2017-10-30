@@ -15,8 +15,10 @@ openshift_configs_dest_dir: "~/ocp-configs"
 openshift_base_scan_template: image-sign-scan-base.yml
 openshift_policy_template: policies-template.yml
 openshift_sign_image_template: sign-image-template.yml
+openshift_event_controller_template: event-controller-template.yml
 
 openshift_configs:
   - "{{ role_path }}/../../../policy/{{ openshift_policy_template }}"
   - "{{ role_path }}/../../../image-sign-scan-base/{{ openshift_base_scan_template }}"
   - "{{ role_path }}/../../../sign-image/{{ openshift_sign_image_template }}"
+  - "{{ role_path }}/../../../event-controller/{{ openshift_event_controller_template }}"
