@@ -1,0 +1,12 @@
+- apiVersion: v1
+  kind: RoleBinding
+  metadata:
+    name: {{ signature_viewer_role }}
+    namespace: ${PROJECT_NAME}
+  roleRef:
+    name: {{ signature_viewer_role }}
+  subjects:
+  - kind: ServiceAccount
+    name: default
+  userNames:
+  - system:serviceaccount:${PROJECT_NAME}:default

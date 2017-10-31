@@ -11,6 +11,10 @@ openshift_signer_sa_name: imagemanager
 
 image_signer_hostgroup: image_signers
 
+signature_viewer_role: signature-viewer
+
+tmp_default_project_template: /tmp/ocp-default-project-template.yml
+
 openshift_configs_dest_dir: "~/ocp-configs"
 openshift_base_scan_template: image-sign-scan-base.yml
 openshift_policy_template: policies-template.yml

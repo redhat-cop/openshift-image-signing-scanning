@@ -66,3 +66,41 @@
   with_items:
     - "{{ gpg_core_files_remote_dir }}"
     - "{{ openshift_configs_dest_dir }}"
+
+- name: Export Default Project Template
+  shell: >
+    oc adm create-bootstrap-project-template -o yaml > {{ tmp_default_project_template }}
+
+- name: Modify Default Project Template
+  lineinfile:
+    dest: "{{ tmp_default_project_template }}"
+    insertbefore: "^parameters:"
+    line: "{{ lookup('template', 'signature-viewer-default-template.j2') }}"
+
+- name: Apply Default Project Template
+  command: >
+    oc apply -n default -f {{ tmp_default_project_template }}
+
+- name: Remove Default Project Template File
+  file:
+    state: absent
+    path: "{{ tmp_default_project_template }}"
+
+- name: Update Master Configuration
+  become: true
+  lineinfile:
+    line: '  projectRequestTemplate: "default/project-request"'
+    regexp: '  projectRequestTemplate:'
+    path: /etc/origin/master/master-config.yaml
+  delegate_to: "{{ item }}"
+  with_items: "{{ groups.masters }}"
+  register: master_config_result
+
+- name: Restart Master Service
+  become: true
+  service:
+    name: "{{ (groups['masters']|length|int > 1) | ternary('atomic-openshift-master-api','atomic-openshift-master') }}"
+    state: restarted
+  delegate_to: "{{ item['_ansible_delegated_vars']['ansible_delegated_host'] }}"
+  with_items: "{{ master_config_result.results }}"
+  when: item.changed
