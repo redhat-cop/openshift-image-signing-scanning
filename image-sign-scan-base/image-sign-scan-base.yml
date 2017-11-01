@@ -15,6 +15,13 @@ objects:
     lookupPolicy:
       local: true
 - apiVersion: v1
+  kind: ImageStream
+  metadata:
+    name: rhel7
+    namespace: "${NAMESPACE}"
+  spec:
+    dockerImageRepository: registry.access.redhat.com/rhel7/rhel
+- apiVersion: v1
   kind: BuildConfig
   metadata:
     name: ${NAME}
@@ -44,11 +51,13 @@ objects:
         - name: OCP_VERSION
           value: "${VERSION}"
         from:
-          kind: DockerImage
-          name: rhel7/rhel
+          kind: ImageStreamTag
+          name: rhel7:7.4
       type: Docker
     triggers:
     - type: ConfigChange
+    - imageChange: {}
+      type: ImageChange
 parameters:
 - name: NAME
   displayName: Name

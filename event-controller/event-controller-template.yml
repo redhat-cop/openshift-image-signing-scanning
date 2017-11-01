@@ -60,6 +60,8 @@ objects:
       type: Docker
     triggers:
     - type: ConfigChange
+    - imageChange: {}
+      type: ImageChange
 - apiVersion: extensions/v1beta1
   kind: Deployment
   metadata:
@@ -118,8 +120,7 @@ objects:
     config.ini: |
       [global]
       k8s_resource=images
-      k8s_api_version=v1
-      k8s_api_group=oapi
+      k8s_namespaced=False
       watcher_plugin=imagesigner
 
       [plugin_imagesigner]
