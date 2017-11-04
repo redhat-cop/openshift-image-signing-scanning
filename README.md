@@ -15,11 +15,15 @@ Image signing is a way to apply a digital signature to a container image. This g
 
 ## Architecture
 
-_Diagram Coming Soon_
+![Image Signing Environment Overview](docs/images/image-signing-environment-overview.png)
 
 The signing architecture utilizes a typical OpenShift environment by specifying dedicated nodes for performing image signing actions. The key difference between image signing nodes and the rest of the nodes in the environment is relaxing the image requirement policies to allow for signing actions to occur on these nodes. 
 
 Two ways to ensure only image signing workloads are scheduled onto these dedicated nodes is through [Node Selectors](https://docs.openshift.com/container-platform/latest/admin_guide/scheduling/node_selector.html#admin-guide-sched-selector-config) placed on image signing resources and [tainting](https://docs.openshift.com/container-platform/latest/admin_guide/scheduling/taints_tolerations.html) image signing nodes. Image signing resources, such as jobs, are configured with tolerations to allow execution on the tainted nodes.
+
+The workflow for signing images can be seen below:
+
+![Image Signing Workflow](docs/images/image-signing-workflow.png)
 
 ## Setup and Configuration
 
