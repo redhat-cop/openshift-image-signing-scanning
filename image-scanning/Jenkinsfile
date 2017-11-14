@@ -1,0 +1,68 @@
+String ocpApiServer = env.OCP_API_SERVER ? "${env.OCP_API_SERVER}" : "https://openshift.default.svc.cluster.local"
+
+node('master') {
+
+env.IMAGE_SIGN_SCANNING_IMAGE = sh (
+    script: "oc get is image-sign-scan-base -o jsonpath='{ .status.dockerImageRepository }'",
+    returnStdout: true
+).trim()
+
+}
+
+podTemplate(label: 'image-sign-scan-base-slave', cloud: 'openshift', serviceAccount: "jenkins", containers: [
+  containerTemplate(name: 'image-sign-scan-base', image: "${env.IMAGE_SIGN_SCANNING_IMAGE}", ttyEnabled: true, privileged: true, command: 'cat'),
+  containerTemplate(name: 'jnlp', image: 'openshift3/jenkins-slave-base-rhel7', args: '${computer.jnlpmac} ${computer.name}')
+],
+  volumes: [
+      hostPathVolume(
+        hostPath: '/var/run/docker.sock',
+        mountPath: '/var/run/docker.sock'
+      ),
+      hostPathVolume(
+        hostPath: '/tmp/image-scanning',
+        mountPath: '/opt/image-scanning'
+      )
+  ]) {
+
+  node('image-sign-scan-base-slave') {
+      
+      container('image-sign-scan-base') {
+      
+      stage('scan image') {
+       
+      image_result = sh(script: """
+
+          TMP_WORKING_DIR=\$(mktemp -d -t cve-scan-XXXXX)
+          WORKING_DIR=/opt/image-scanning/\$(basename \$TMP_WORKING_DIR)
+          IMAGE_CONTENT=\$WORKING_DIR/image-content
+          
+          mkdir -p \$IMAGE_CONTENT
+
+          image-inspector --path=\$IMAGE_CONTENT --scan-results-dir=$WORKSPACE --scan-type=openscap --openscap-html-report --image=${IMAGE}
+          
+          
+          rm -rf \$WORKING_DIR
+          set +e
+          grep "<result>fail</result>" \$WORKING_DIR/results-arf.xml &>/dev/null
+
+
+          if [ \$? -ne 0 ]; then
+            exit 0
+          else
+            exit 1
+          fi
+          
+          """, returnStatus: true)
+    
+          archiveArtifacts(artifacts: 'results.html')
+          
+          if(image_result != 0) {
+              currentBuild.result = 'FAILURE'
+              error("Image Scanning Failed!")
+          }
+      }
+      
+      }
+  }
+}
+
