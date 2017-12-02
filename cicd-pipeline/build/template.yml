@@ -323,7 +323,7 @@ parameters:
   displayName: Namespace to sign images
   description: Namespace which is responsible for signing images.
   required: true
-  value: image-signer
+  value: image-management
 - name: IMAGESIGNER_NAME
   displayName: Name of the Image Signer Image 
   description: Base image containing resources to sign and scan images.

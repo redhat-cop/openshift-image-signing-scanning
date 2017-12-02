@@ -97,7 +97,7 @@ objects:
           ${NODE_SELECTOR_KEY}: ${NODE_SELECTOR_VALUE}
         serviceAccount: ${SERVICE_ACCOUNT_NAME}
         tolerations:
-        - key: image_signer
+        - key: image_management
           operator: Equal
           value: "true"
           effect: NoExecute
@@ -110,7 +110,7 @@ parameters:
 - name: NAMESPACE
   displayName: Namespace
   description: Namespace to Run the Job Within
-  value: image-signer
+  value: image-management
   required: true
 - name: IMAGE_TO_SIGN
   displayName: Image to Sign
@@ -132,7 +132,7 @@ parameters:
 - name: NODE_SELECTOR_KEY
   displayName: Node Selector Key
   description: Node Selector Key for the Job
-  value: "image_signer"
+  value: "image_management"
   required: true
 - name: NODE_SELECTOR_VALUE
   displayName: Node Selector Value

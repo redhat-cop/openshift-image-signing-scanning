@@ -106,7 +106,7 @@ parameters:
 - description: The Namespace Containing the Scanner Image.
   displayName: Scanner Image Namespace
   name: SCANNER_IMAGE_NAMESPACE
-  value: image-signer
+  value: image-management
 - description: The Name of the Scanner Image
   displayName: Scanner Image Name
   name: SCANNER_IMAGE_NAME

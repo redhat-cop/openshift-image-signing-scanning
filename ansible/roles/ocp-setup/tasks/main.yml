@@ -7,39 +7,39 @@
 
 - name: Check if Project Exists
   command: >
-    oc get project {{ openshift_signer_project_name }}
+    oc get project {{ openshift_image_management_project_name }}
   ignore_errors: true
   register: signer_project_exists
 
 - name: Create OpenShift Project
   command: >
-    oc adm new-project {{ openshift_signer_project_name }} --display-name="{{ openshift_signer_project_display_name }}"
+    oc adm new-project {{ openshift_image_management_project_name }} --display-name="{{ openshift_image_management_project_display_name }}"
   when: signer_project_exists.rc != 0
 
 - name: Label Image Signer Nodes
   command: >
-    oc label node {{ item }} {{ openshift_signer_node_label }} --overwrite=true
-  with_items: "{{ groups[ image_signer_hostgroup ] }}"
+    oc label node {{ item }} {{ openshift_image_management_node_label }} --overwrite=true
+  with_items: "{{ groups[ image_managers_hostgroup ] }}"
 
 - name: Taint Image Signer Nodes
   command: >
-    oc adm taint nodes {{ item }} {{ openshift_signer_node_taint }} --overwrite=true
-  with_items: "{{ groups[ image_signer_hostgroup ] }}"
+    oc adm taint nodes {{ item }} {{ openshift_image_management_node_taint }} --overwrite=true
+  with_items: "{{ groups[ image_managers_hostgroup ] }}"
 
 - name: Check if GPG Secret Exists
   command: >
-    oc get secret {{ openshift_signer_gpg_secret_name }} -n {{ openshift_signer_project_name }}
+    oc get secret {{ openshift_image_management_gpg_secret_name }} -n {{ openshift_image_management_project_name }}
   ignore_errors: yes
   register: signer_secret_exists
 
 - name: Delete GPG Secret
   command: >
-    oc delete secret {{ openshift_signer_gpg_secret_name }} -n {{ openshift_signer_project_name }}
+    oc delete secret {{ openshift_image_management_gpg_secret_name }} -n {{ openshift_image_management_project_name }}
   when: signer_secret_exists.rc == 0
 
 - name: Create GPG Secret
   command: >
-    oc secret new {{ openshift_signer_gpg_secret_name }} {{ gpg_core_files_remote_dir }} -n {{ openshift_signer_project_name }}
+    oc secret new {{ openshift_image_management_gpg_secret_name }} {{ gpg_core_files_remote_dir }} -n {{ openshift_image_management_project_name }}
 
 - name: Copy OpenShift Configurations
   copy:
@@ -49,21 +49,21 @@
 
 - name: Configure Privileged SCC
   command: >
-    oc adm policy add-scc-to-user privileged  -n {{ openshift_signer_project_name }} -z {{ openshift_signer_sa_name }}
+    oc adm policy add-scc-to-user privileged  -n {{ openshift_image_management_project_name }} -z {{ openshift_image_management_sa_name }}
 
 - name: Instantiate OpenShift Templates
   shell: "{{ item }}"
   with_items:
-    - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -p SERVICE_ACCOUNT_NAME={{ openshift_signer_sa_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_policy_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
-    - "oc apply -n {{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_template }}"
-    - "oc apply -n {{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_pod_template }}"
-    - "oc apply -n {{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_scan_image_pod_template }}"
-    - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_base_scan_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
+    - "oc process -p NAMESPACE={{ openshift_image_management_project_name }} -p SERVICE_ACCOUNT_NAME={{ openshift_image_management_sa_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_policy_template }} | oc apply -n {{ openshift_image_management_project_name }} -f-"
+    - "oc apply -n {{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_template }}"
+    - "oc apply -n {{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_pod_template }}"
+    - "oc apply -n {{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_scan_image_pod_template }}"
+    - "oc process -p NAMESPACE={{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_base_scan_template }} | oc apply -n {{ openshift_image_management_project_name }} -f-"
 
 - name: Instantiate OpenShift Templates (Event Controller)
   shell: "{{ item }}"
   with_items:
-    - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_event_controller_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
+    - "oc process -p NAMESPACE={{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_event_controller_template }} | oc apply -n {{ openshift_image_management_project_name }} -f-"
   when: deploy_eventcontroller
 
 - name: Remove Configuration Directories
@@ -118,21 +118,24 @@
     seconds: 10
   when: restart_masters.changed
 
-- name: "Check ImageStream Status"
-  command: >
-    oc get is image-sign-scan-base -n image-signer -o json
-  register: is_json
-  until: (is_json.stdout | from_json)['status']['tags'] is defined and (is_json.stdout | from_json)['status']['tags'] | length > 0
-  retries: 40
-  delay: 10
+- name: Sign Base Signer Scanner Image
+  block:
+    - name: "Check ImageStream Status"
+      command: >
+        oc get is image-sign-scan-base -n {{ openshift_image_management_project_name }} -o json
+      register: is_json
+      until: (is_json.stdout | from_json)['status']['tags'] is defined and (is_json.stdout | from_json)['status']['tags'] | length > 0
+      retries: 40
+      delay: 10
 
-- name: Query Image
-  command: >
-    oc get image {{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['image'] }} -o json
-  register: query_image_output
+    - name: Query Image
+      command: >
+        oc get image {{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['image'] }} -o json
+      register: query_image_output
 
-- name: Instantiate Signing Pod
-  shell: oc process {{ openshift_signer_project_name }}//{{ openshift_sign_pod_template_name }} -p IMAGE_TO_SIGN={{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['dockerImageReference'].split('@')[0] }}:{{ (is_json.stdout | from_json)['status']['tags'][0]['tag'] }} -p IMAGE_DIGEST={{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['image'] }} -p SIGN_BY={{ gpg_publickey_file }} | oc apply -n image-signer -f-
-  when: (query_image_output.stdout | from_json)['signatures'] is not defined
+    - name: Instantiate Signing Pod
+      shell: oc process {{ openshift_image_management_project_name }}//{{ openshift_sign_pod_template_name }} -p IMAGE_TO_SIGN={{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['dockerImageReference'].split('@')[0] }}:{{ (is_json.stdout | from_json)['status']['tags'][0]['tag'] }} -p IMAGE_DIGEST={{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['image'] }} -p SIGN_BY={{ gpg_publickey_file }} | oc apply -n {{ openshift_image_management_project_name }} -f-
+      when: (query_image_output.stdout | from_json)['signatures'] is not defined
+  when: not deploy_eventcontroller
 
 

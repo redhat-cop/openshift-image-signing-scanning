@@ -3,15 +3,15 @@
 gpg_core_files_dir: "{{ playbook_dir }}/gpg_remote/gpg_config"
 gpg_core_files_remote_dir: "~/.gpg-openshift"
 gpg_publickey_file: "openshift@example.com"
-openshift_signer_project_name: image-signer
-openshift_signer_project_display_name: Image Signer
-openshift_signer_node_label: "image_signer=true"
-openshift_signer_node_taint: "image_signer=true:NoExecute"
-openshift_signer_gpg_secret_name: gpg
-openshift_signer_sa_name: imagemanager
+openshift_image_management_project_name: image-management
+openshift_image_management_project_display_name: Image Management
+openshift_image_management_node_label: "image_management=true"
+openshift_image_management_node_taint: "image_management=true:NoExecute"
+openshift_image_management_gpg_secret_name: gpg
+openshift_image_management_sa_name: imagemanager
 openshift_sign_pod_template_name: sign-image-pod-template
 
-image_signer_hostgroup: image_signers
+image_managers_hostgroup: image_managers
 
 signature_viewer_role: signature-viewer
 

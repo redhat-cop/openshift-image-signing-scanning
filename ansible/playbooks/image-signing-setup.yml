@@ -5,7 +5,7 @@
   roles:
     - { role: gpg-generate, when: (generate_gpg_key is not defined) or (generate_gpg_key is defined and generate_gpg_key) }
 
-- hosts: nodes:!image_signers
+- hosts: nodes:!image_managers
   roles:
     - node-config
 

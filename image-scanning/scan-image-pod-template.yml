@@ -87,7 +87,7 @@ objects:
     serviceAccount: ${SERVICE_ACCOUNT_NAME}
     imagePullPolicy: Always
     tolerations:
-    - key: image_signer
+    - key: image_management
       operator: Equal
       value: "true"
       effect: NoExecute
@@ -100,7 +100,7 @@ parameters:
 - name: NAMESPACE
   displayName: Namespace
   description: Namespace to Run the Job Within
-  value: image-signer
+  value: image-management
   required: true
 - name: BUILD_IMAGE
   displayName: Build image
@@ -113,7 +113,7 @@ parameters:
 - name: NODE_SELECTOR_KEY
   displayName: Node Selector Key
   description: Node Selector Key for the Job
-  value: "image_signer"
+  value: "image_management"
   required: true
 - name: NODE_SELECTOR_VALUE
   displayName: Node Selector Value

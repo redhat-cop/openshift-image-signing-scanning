@@ -41,7 +41,7 @@ A set of Ansible playbooks and roles is available to automate the configuration 
 The inventory file is broken down into 3 (three) host groups:
 
 * gpg - Machine responsible for creating GPG keys
-* image_signers - OpenShift nodes responsible for signing images
+* image_managers - OpenShift nodes responsible for signing images
 * nodes - All OpenShift nodes
 
 #### Playbook Execution
@@ -90,7 +90,7 @@ The template requires the following parameters:
 |IMAGE_DIGEST|Image digest (Ex: sha256:43bf6f9ad59fe24e72bff8f2e7427639c034026d6ba43d37651d07812266e99a)| |
 |SIGN_BY|Identity of the signer| |
 |GPG_SECRET| Name of the secret containing the GPG keypair| gpg |
-|NODE_SELECTOR_KEY| Node selector key | image_signer |
+|NODE_SELECTOR_KEY| Node selector key | image_management |
 |NODE_SELECTOR_VALUE| Node selector value | true |
 
 Instantiate the template

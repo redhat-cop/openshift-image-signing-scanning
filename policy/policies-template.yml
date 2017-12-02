@@ -99,5 +99,5 @@ parameters:
 - name: NAMESPACE
   displayName: Namespace
   description: Namespace Containing Resources
-  value: image-signer
+  value: image-management
   required: true

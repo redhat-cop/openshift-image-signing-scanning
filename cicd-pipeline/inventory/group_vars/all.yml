@@ -5,6 +5,7 @@ openshift_cluster_content:
   - name: image-scan-sign-pipeline
     template: "https://raw.githubusercontent.com/redhat-cop/cluster-lifecycle/master/files/projectrequest/template.yml"
     params: "{{ inventory_dir }}/../projectrequests/image-scan-sign-pipeline"
+    template_action: create
 - object: build
   content:
   - name: build
