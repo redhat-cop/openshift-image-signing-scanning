@@ -35,6 +35,61 @@ objects:
   - kind: ServiceAccount
     name: "${SERVICE_ACCOUNT_NAME}"
     namespace: "${NAMESPACE}"
+- apiVersion: v1
+  kind: Role
+  metadata:
+    creationTimestamp: null
+    name: public-resource-viewer
+  rules:
+  - apiGroups:
+    - template.openshift.io
+    - ""
+    attributeRestrictions: null
+    resources:
+    - templates
+    verbs:
+    - get
+  - apiGroups:
+    - template.openshift.io
+    - ""
+    attributeRestrictions: null
+    resources:
+    - processedtemplates
+    verbs:
+    - create
+  - apiGroups:
+    - image.openshift.io
+    - ""
+    attributeRestrictions: null
+    resources:
+    - imagestreams
+    - imagestreams/layers
+    - imagestreamimages
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    attributeRestrictions: null
+    resources:
+    - pods
+    - pods/exec
+    verbs:
+    - create
+    - get
+- apiVersion: v1
+  groupNames:
+  - system:authenticated
+  kind: RoleBinding
+  metadata:
+    creationTimestamp: null
+    name: public-resource-viewers
+  roleRef:
+    name: public-resource-viewer
+    namespace: "${NAMESPACE}"
+  subjects:
+  - kind: SystemGroup
+    name: system:authenticated
+  userNames: null
 parameters:
 - name: SERVICE_ACCOUNT_NAME
   displayName: Service Account Name

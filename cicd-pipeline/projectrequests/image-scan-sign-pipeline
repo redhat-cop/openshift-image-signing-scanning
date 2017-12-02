@@ -1,0 +1,3 @@
+NAMESPACE=image-scan-sign-pipeline
+NAMESPACE_DISPLAY_NAME=Image Scan Sign Pipeline
+NAMESPACE_DESCRIPTION=Demonstration of an Image Scanning and Signing Application Pipeline

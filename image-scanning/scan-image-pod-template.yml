@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: scan-image-pod-template
+  annotations:
+    openshift.io/display-name: Scan Image
+    description: Template to create a Job to Scan an Image
+objects:
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    name: "scan-image-${UNIQUE_VALUE}"
+    namespace: "${NAMESPACE}"
+  spec:
+    containers:
+    - env:
+        - name: BUILD_IMAGE
+          value: ${BUILD_IMAGE}
+      name: scan-image
+      image: image-sign-scan-base
+      command:
+        - "/bin/bash"
+        - "-c"
+        - >
+            WORKING_DIR=$(mktemp -d -t cve-scan-XXXXX)
+            IMAGE_CONTENT=${WORKING_DIR}/image-content
+            RESULTS=/tmp/results
+            RESULT_SHARE=/tmp/share-results
+            DOCKER_CFG_HOME=/tmp/dockercfg
+
+            mkdir -p $IMAGE_CONTENT $DOCKER_CFG_HOME
+
+            oc login https://kubernetes.default.svc.cluster.local --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) > /dev/null 2>&1 
+
+            SA_FULLNAME=$(oc whoami)
+            SA_NAME="${SA_FULLNAME##*:}"
+
+            NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+            SA_JSON=$(oc get sa -n $NAMESPACE $SA_NAME -o json)
+            DOCKERCFG_SECRET_NAME=$(echo "${SA_JSON}" | jq -r ".imagePullSecrets[] | select( .name | contains(\"${SA_NAME}-dockercfg\")).name")
+            
+            oc get secret -n $NAMESPACE $DOCKERCFG_SECRET_NAME -o json | jq -r ".data[] | select(\".dockercfg\")" | base64 -d > $DOCKER_CFG_HOME/.dockercfg
+    
+            image-inspector --path=${IMAGE_CONTENT} --scan-results-dir=${RESULTS} --scan-type=openscap --openscap-html-report --dockercfg=$DOCKER_CFG_HOME/.dockercfg --image=$BUILD_IMAGE
+
+            mkdir -p "${RESULT_SHARE}"
+
+            cp ${RESULTS}/results-arf.xml ${RESULTS}/results.html ${RESULT_SHARE}
+
+            COUNTER=0
+            DELAY=5
+            MAX_COUNTER=30
+
+            while [ $COUNTER -lt $MAX_COUNTER ]; do
+              
+              if [ ! -d $RESULT_SHARE ]; then
+                echo "Share Results Directory has been Deleted. Terminating Pod"
+                exit 0
+              fi
+
+              echo "Waiting for Results to be Retrieved..."
+
+              COUNTER=$(( $COUNTER + 1 ))
+
+              if [ $COUNTER -eq $MAX_COUNTER ]; then
+                echo "Max Validation Attempts Exceeded."
+                exit 1
+              fi
+              
+              sleep $DELAY
+            done
+      securityContext:
+        privileged: true
+      nodeSelector:
+        ${NODE_SELECTOR_KEY}:${NODE_SELECTOR_VALUE}
+      resources:
+        requests: 
+          memory: ${MEMORY_REQUESTS}
+      volumeMounts:
+        - mountPath: /var/run/docker.sock
+          name: docker-socket
+    volumes:
+      - hostPath:
+          path: /var/run/docker.sock
+        name: docker-socket
+    restartPolicy: Never
+    serviceAccount: ${SERVICE_ACCOUNT_NAME}
+    imagePullPolicy: Always
+    tolerations:
+    - key: image_signer
+      operator: Equal
+      value: "true"
+      effect: NoExecute
+parameters:
+- name: SERVICE_ACCOUNT_NAME
+  displayName: Service Account Name
+  description: Name of the service account to Run the Job As
+  value: imagemanager
+  required: true
+- name: NAMESPACE
+  displayName: Namespace
+  description: Namespace to Run the Job Within
+  value: image-signer
+  required: true
+- name: BUILD_IMAGE
+  displayName: Build image
+  description: Name of the Image to Scan
+  required: true
+- name: MEMORY_REQUESTS
+  displayName: Request Memory
+  description: Amount of Memory to Request
+  value: "1Gi"
+- name: NODE_SELECTOR_KEY
+  displayName: Node Selector Key
+  description: Node Selector Key for the Job
+  value: "image_signer"
+  required: true
+- name: NODE_SELECTOR_VALUE
+  displayName: Node Selector Value
+  description: Node Selector Value for the Job
+  value: "true"
+  required: true
+- name: UNIQUE_VALUE  
+  generate: expression
+  from: "[a-z0-9]{5}"
+  required: true

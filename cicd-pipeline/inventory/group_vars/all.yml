@@ -1,0 +1,19 @@
+---
+openshift_cluster_content:
+- object: projectrequest
+  content:
+  - name: image-scan-sign-pipeline
+    template: "https://raw.githubusercontent.com/redhat-cop/cluster-lifecycle/master/files/projectrequest/template.yml"
+    params: "{{ inventory_dir }}/../projectrequests/image-scan-sign-pipeline"
+- object: build
+  content:
+  - name: build
+    template: "{{ inventory_dir }}/../build/template.yml"
+    params: "{{ inventory_dir }}/../build/params"
+    namespace: image-scan-sign-pipeline
+- object: deploy
+  content:
+  - name: deploy
+    template: "{{ inventory_dir }}/../deploy/template.yml"
+    params: "{{ inventory_dir }}/../deploy/params"
+    namespace: image-scan-sign-pipeline

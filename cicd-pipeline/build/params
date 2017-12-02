@@ -1,0 +1,3 @@
+IGNORE_SCAN_FAILURE="true"
+GIT_REPO=https://github.com/redhat-cop/spring-rest
+NAMESPACE=image-scan-sign-pipeline

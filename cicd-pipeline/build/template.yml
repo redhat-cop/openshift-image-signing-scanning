@@ -1,0 +1,351 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: sample-java-build-template
+  annotations:
+    openshift.io/display-name: Sample Java Application Build Template
+    description: Template to build a sample Java application
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    name: ${NAME}
+    namespace: "${NAMESPACE}"
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: ${NAME}
+    name: ${NAME}
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${NAME}:latest
+    source:
+      binary: {}
+      type: Binary
+    strategy:
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: ${BASE_IMAGESTREAM_NAME}:${BASE_IMAGESTREAM_TAG}
+          namespace: ${BASE_IMAGESTREAM_NAMESPACE}
+      type: Source
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    name: ${NAME}-pipeline
+  labels:
+    app: ${NAME}
+  spec:
+    strategy:
+      type: JenkinsPipeline
+      jenkinsPipelineStrategy:
+        env:
+        - name: APP_NAME
+          value: "${NAME}"
+        - name: GIT_REPO
+          value: "${GIT_REPO}"
+        - name: NAMESPACE
+          value: "${NAMESPACE}"
+        - name: IMAGESIGNER_NAMESPACE
+          value: "${IMAGESIGNER_NAMESPACE}"
+        - name: IMAGESIGNER_NAME
+          value: "${IMAGESIGNER_NAME}"
+        - name: SERVICE_ACCOUNT
+          value: "${SERVICE_ACCOUNT}"
+        - name: IGNORE_SCAN_FAILURE
+          value: "${IGNORE_SCAN_FAILURE}"
+        - name: SIGN_IMAGE_TEMPLATE
+          value: "${SIGN_IMAGE_TEMPLATE}"
+        - name: GPG_IDENTITY
+          value: "${GPG_IDENTITY}"
+        jenkinsfile: |-
+          node('master') {
+              env.IMAGE_SIGN_SCANNING_IMAGE = sh (
+                  script: """
+                    set +x
+                    oc get is ${env.IMAGESIGNER_NAME} -n ${env.IMAGESIGNER_NAMESPACE} -o jsonpath='{ .status.dockerImageRepository }'
+                    
+                    """,
+                  returnStdout: true
+              ).trim()
+              
+              env.SERVICE_ACCOUNT_SECRET = sh (
+                  script: """
+                    set +x
+                    oc get sa ${env.SERVICE_ACCOUNT} -o jsonpath='{ .imagePullSecrets[0].name}'
+                    """,
+                  returnStdout: true
+              ).trim()
+          }
+
+
+          node('maven') {
+              
+              stage('Checkout') {
+                  
+                  git url: env.GIT_REPO
+                  
+              }
+              
+              stage('Build') {
+                  
+                  String pomFileLocation = env.BUILD_CONTEXT_DIR ? "${env.BUILD_CONTEXT_DIR}/pom.xml" : "pom.xml"
+                  
+                  sh """
+                  
+                    mvn clean package -DskipTests=true -f ${pomFileLocation}
+                  
+                  """
+                  
+                  def files = findFiles(glob: "**/*.jar") 
+                  
+                  
+                  def buildName = sh (
+                      script: """
+                        set +x
+                        oc start-build ${env.APP_NAME} -n ${env.NAMESPACE} --from-file=${files[0].path} --wait -o name
+                        """,
+                      returnStdout: true
+                  ).trim()
+                  
+                  def buildResult = sh (
+                      script: """
+                        set +x
+                        oc get ${buildName} -n ${env.NAMESPACE} -o json
+                        """,
+                      returnStdout: true
+                  ).trim()
+                  
+                  def json = readJSON text: buildResult
+                  
+                  def outputDockerImageReference = json.status.outputDockerImageReference
+
+                  env.IMAGE_BUILD_REFERENCE = outputDockerImageReference
+                  env.IMAGE_DIGEST = json.status.output.to.imageDigest
+                  env.IMAGE_NAME_TAG = outputDockerImageReference.substring(outputDockerImageReference.lastIndexOf('/')+1)
+                  env.BUILD_IMAGE = outputDockerImageReference.substring(0,outputDockerImageReference.lastIndexOf(':'))+"@${env.IMAGE_DIGEST}"
+                  
+              }
+          }
+              
+
+          podTemplate(label: 'image-sign-scan-base-slave', cloud: 'openshift', serviceAccount: "$SERVICE_ACCOUNT", containers: [
+          containerTemplate(name: 'image-sign-scan-base', image: "${env.IMAGE_SIGN_SCANNING_IMAGE}", ttyEnabled: true, command: 'cat', resourceRequestMemory: '1Gi'),
+          containerTemplate(name: 'jnlp', image: 'openshift3/jenkins-slave-base-rhel7', args: '${computer.jnlpmac} ${computer.name}', resourceRequestMemory: '1Gi')
+          ]) {
+                    
+                  node('image-sign-scan-base-slave') {
+                    container('image-sign-scan-base') {
+                    
+                      stage('Scan') {
+                          
+                        image_result = sh(script: """
+                        set +x
+                        SCAN_POD=\$(oc process ${env.IMAGESIGNER_NAMESPACE}//scan-image-pod-template -p BUILD_IMAGE=${env.BUILD_IMAGE} | oc apply -n  ${env.IMAGESIGNER_NAMESPACE} -f- -o name)
+                        CLEANSED_SCAN_POD=\${SCAN_POD##*/}
+                        echo "Scan Pod is: \$CLEANSED_SCAN_POD"
+                        
+                        set +e
+                        
+                        COUNTER=0
+                        DELAY=10
+                        MAX_COUNTER=30
+                        
+                        while [ \$COUNTER -lt \$MAX_COUNTER ]
+                        do
+                          POD_STATUS=\$(oc get pod -n ${env.IMAGESIGNER_NAMESPACE} \$CLEANSED_SCAN_POD -o jsonpath='{ .status.phase }')
+
+                          if [ \$POD_STATUS == "Running" ]; then
+
+                            oc exec -n ${env.IMAGESIGNER_NAMESPACE} \$CLEANSED_SCAN_POD -- ls -l /tmp/share-results &>/dev/null
+                          
+                            if [ \$? -eq 0 ]; then
+                          
+                              echo "Results Directory Exists. Copying Files"
+                              oc cp ${env.IMAGESIGNER_NAMESPACE}/\$CLEANSED_SCAN_POD:/tmp/share-results ${WORKSPACE}
+                            
+                              echo "Removing Directory in Scanning Pod"
+                            
+                              oc exec -n ${env.IMAGESIGNER_NAMESPACE} \$CLEANSED_SCAN_POD -- rm -rf /tmp/share-results &>/dev/null
+                            
+                              break
+                          
+                            fi
+
+                          fi
+                        
+                          COUNTER=\$(( \$COUNTER + 1 ))
+                        
+                          if [ \$COUNTER -eq \$MAX_COUNTER ]; then
+                            echo "Max Validation Attempts Exceeded."
+                            exit 1
+                          fi
+                          
+                          sleep \$DELAY
+                        
+                        done
+                        
+                        grep "<result>fail</result>" ${WORKSPACE}/results-arf.xml &>/dev/null
+              
+                        RESULT=\$?
+                      
+                        if [ \${RESULT} -ne 0 ]; then
+                          exit 0
+                        else
+                          exit 1
+                        fi
+
+                        set -e
+                        
+                        """, returnStatus: true)
+                  
+                        archiveArtifacts(artifacts: 'results.html')
+                        
+                        def ignoreScanFailure = "${env.IGNORE_SCAN_FAILURE}".toBoolean()
+                        
+                        if(!ignoreScanFailure && image_result != 0) {
+                            currentBuild.result = 'FAILURE'
+                            error("Image Scanning Failed!")
+                        }
+                        else if(ignoreScanFailure && image_result != 0) {
+                            println("Image Scanning Failed. Pipeline Allowed to Continue..")
+                        }
+                        else {
+                            println("Image Scanning Passed")
+                        }
+
+                      }
+                  }
+              }
+                  
+              input message: "Image Has Completed Scanning. Do You Want to Sign?", ok: "Yes"
+
+          podTemplate(label: 'image-sign-scan-base-slave', cloud: 'openshift', serviceAccount: "$SERVICE_ACCOUNT", containers: [
+          containerTemplate(name: 'image-sign-scan-base', image: "${env.IMAGE_SIGN_SCANNING_IMAGE}", ttyEnabled: true, command: 'cat'),
+          containerTemplate(name: 'jnlp', image: 'openshift3/jenkins-slave-base-rhel7', args: '${computer.jnlpmac} ${computer.name}')
+          ]) {
+                    
+                  node('image-sign-scan-base-slave') {
+                    container('image-sign-scan-base') {
+                    
+                      stage('Sign') {
+                          
+                          sh """
+                          set +x
+                          
+                            COUNTER=0
+                            DELAY=10
+                            MAX_COUNTER=30
+                            
+                            echo "Triggering Image Signing..."
+
+                            SIGN_POD=\$(oc process ${env.IMAGESIGNER_NAMESPACE}//${env.SIGN_IMAGE_TEMPLATE} -p IMAGE_TO_SIGN=${env.IMAGE_BUILD_REFERENCE} -p IMAGE_DIGEST=${env.IMAGE_DIGEST} -p SIGN_BY=${env.GPG_IDENTITY} | oc apply -n ${env.IMAGESIGNER_NAMESPACE} -f- -o name)
+                            
+                            while [ \$COUNTER -lt \$MAX_COUNTER ]
+                            do
+                            
+                              POD_RESPONSE=\$(oc get -n ${env.IMAGESIGNER_NAMESPACE} \$SIGN_POD -o jsonpath='{ .status.phase }')
+                              
+                              if [ "\$POD_RESPONSE" == "Succeeded" ]; then
+                              
+                                echo "Signing Pod Completed successfully!"
+                                exit 0
+                              
+                              elif [ "\$POD_RESPONSE" == "Failed" ]; then
+                                echo "Signing Pod Failed!"
+                                exit 1
+                              fi
+                              
+                              COUNTER=\$(( \$COUNTER + 1 ))
+                              
+                              if [ \$COUNTER -eq \$MAX_COUNTER ]; then
+                                echo "Max Validation Attempts Exceeded. Failed Verifying Application Deployment..."
+                                exit 1
+                              fi
+                              
+                              sleep \$DELAY
+                            
+                            done
+                          
+                          """
+                      }
+                      
+                      stage('Deploy') {
+                        sh """
+                          set +x
+                          
+                          LATEST_IMAGE_REF=\$(oc get istag -n ${env.NAMESPACE} ${env.IMAGE_NAME_TAG} -o jsonpath='{ .image.dockerImageReference }')
+                      
+                          oc patch dc -n ${env.NAMESPACE} ${env.APP_NAME} --type='json' -p="[{\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/image\", \"value\": \\"\$LATEST_IMAGE_REF\\"}]"
+                      
+                          oc rollout -n ${env.NAMESPACE} latest dc/${env.APP_NAME} || true
+
+                        """
+                        
+                        openshiftVerifyDeployment deploymentConfig: "${env.APP_NAME}", namespace: "${env.NAMESPACE}"
+                        
+                      }
+                  }
+              }
+          }
+          }
+parameters:
+- name: NAME
+  displayName: Name
+  description: Application Name
+  value: java-app
+  required: true
+- name: NAMESPACE
+  displayName: Namespace
+  description: Namespace to Deploy Resources Within
+- name: BASE_IMAGESTREAM_NAME
+  displayName: Base ImageStream
+  description: Name of the Base ImageStream
+  value: redhat-openjdk18-openshift
+  required: true
+- name: BASE_IMAGESTREAM_TAG
+  displayName: Base ImageStream Tag
+  description: Base ImageStream Tag
+  value: "1.1"
+  required: true
+- name: BASE_IMAGESTREAM_NAMESPACE
+  displayName: Base ImageStream Namespace
+  description: Base ImageStream Namespace
+  value: "openshift"
+- name: GIT_REPO
+  displayName: Git Repository URL
+  description: The URL of the repository with your application source code.
+  required: true
+- name: IMAGESIGNER_NAMESPACE
+  displayName: Namespace to sign images
+  description: Namespace which is responsible for signing images.
+  required: true
+  value: image-signer
+- name: IMAGESIGNER_NAME
+  displayName: Name of the Image Signer Image 
+  description: Base image containing resources to sign and scan images.
+  required: true
+  value: image-sign-scan-base
+- name: SERVICE_ACCOUNT
+  displayName: Service Account 
+  description: Name of the service account to run agents.
+  required: true
+  value: jenkins
+- name: IGNORE_SCAN_FAILURE
+  displayName: Ignore Scan Failures 
+  description: Continue pipeline even if a image scan fails.
+  required: true
+  value: "false"
+- name: SIGN_IMAGE_TEMPLATE
+  displayName: Name of the template to sign images 
+  description: Template used to sign images.
+  required: true
+  value: sign-image-pod-template
+- name: GPG_IDENTITY
+  displayName: GPG Identity 
+  description: Name of the GPG identity used to sign images.
+  required: true
+  value: openshift@example.com

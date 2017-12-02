@@ -56,8 +56,15 @@
   with_items:
     - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -p SERVICE_ACCOUNT_NAME={{ openshift_signer_sa_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_policy_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
     - "oc apply -n {{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_template }}"
+    - "oc apply -n {{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_pod_template }}"
+    - "oc apply -n {{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_scan_image_pod_template }}"
     - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_base_scan_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
+
+- name: Instantiate OpenShift Templates (Event Controller)
+  shell: "{{ item }}"
+  with_items:
     - "oc process -p NAMESPACE={{ openshift_signer_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_event_controller_template }} | oc apply -n {{ openshift_signer_project_name }} -f-"
+  when: deploy_eventcontroller
 
 - name: Remove Configuration Directories
   file:
@@ -103,4 +110,29 @@
     state: restarted
   delegate_to: "{{ item['_ansible_delegated_vars']['ansible_delegated_host'] }}"
   with_items: "{{ master_config_result.results }}"
+  register: restart_masters
   when: item.changed
+
+- name: Pause to let Master Service Come Back Online
+  pause:
+    seconds: 10
+  when: restart_masters.changed
+
+- name: "Check ImageStream Status"
+  command: >
+    oc get is image-sign-scan-base -n image-signer -o json
+  register: is_json
+  until: (is_json.stdout | from_json)['status']['tags'] is defined and (is_json.stdout | from_json)['status']['tags'] | length > 0
+  retries: 40
+  delay: 10
+
+- name: Query Image
+  command: >
+    oc get image {{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['image'] }} -o json
+  register: query_image_output
+
+- name: Instantiate Signing Pod
+  shell: oc process {{ openshift_signer_project_name }}//{{ openshift_sign_pod_template_name }} -p IMAGE_TO_SIGN={{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['dockerImageReference'].split('@')[0] }}:{{ (is_json.stdout | from_json)['status']['tags'][0]['tag'] }} -p IMAGE_DIGEST={{ (is_json.stdout | from_json)['status']['tags'][0]['items'][0]['image'] }} -p SIGN_BY={{ gpg_publickey_file }} | oc apply -n image-signer -f-
+  when: (query_image_output.stdout | from_json)['signatures'] is not defined
+
+
