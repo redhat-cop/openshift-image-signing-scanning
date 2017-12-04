@@ -7,5 +7,5 @@
 #All OpenShift Nodes in the cluster
 [nodes]
 
-# Dedicated OpenShift nodes for signing images and related infrastructure components
-[image_signers]
+# Dedicated OpenShift nodes for managing images and related infrastructure components
+[image_managers]
