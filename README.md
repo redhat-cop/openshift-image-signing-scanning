@@ -48,6 +48,7 @@ Deployment of a controller which monitors the OpenShift API at a cluster level. 
 
 Implementation of image scanning and image signing as part of a Continuous Integration and Continuous Delivery (CI/CD) process using the Jenkins pipeline as code concept. Source code is retrieved from a source code management tool which is then compiled and packaged into an artifact. The artifact is packaged into a Docker image through the execution of the [Source-To-Image](https://docs.openshift.com/container-platform/latest/architecture/core_concepts/builds_and_image_streams.html#source-build) build process. Once complete, the resulting image is scanned for vulnerabilities. The end user is provided the ability to review the results of the scan and decide whether to continue or abort the pipeline. If approved, the image is signed using the tools previously configured in the environment and then is ultimately deployed. 
 
+![CICD  Workflow](docs/images/cicd-detailed.png)
 
 ## Setup and Configuration
 
@@ -84,8 +85,4 @@ When ready, execute the following command from within the _playbooks_ directory 
 ansible-playbook -i hosts image-signing-scanning-setup.yml
 ```
 
-Once the playbook completes, the OpenShift environment will be configured to handle image signing and execution.
-
-## Testing the Architectures
-
-Coming soon
+Once the playbook completes, the OpenShift environment will be configured to handle image scanning, signing and execution.

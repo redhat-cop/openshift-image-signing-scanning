@@ -58,7 +58,7 @@
     - "oc apply -n {{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_template }}"
     - "oc apply -n {{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_sign_image_pod_template }}"
     - "oc apply -n {{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_scan_image_pod_template }}"
-    - "oc process -p NAMESPACE={{ openshift_image_management_project_name }} -f {{ openshift_configs_dest_dir }}/{{ openshift_base_scan_template }} | oc apply -n {{ openshift_image_management_project_name }} -f-"
+    - "oc process -p NAMESPACE={{ openshift_image_management_project_name }} -p VERSION={{ openshift_version }} -f {{ openshift_configs_dest_dir }}/{{ openshift_base_scan_template }} | oc apply -n {{ openshift_image_management_project_name }} -f-"
 
 - name: Instantiate OpenShift Templates (Event Controller)
   shell: "{{ item }}"
@@ -106,7 +106,7 @@
 - name: Restart Master Service
   become: true
   service:
-    name: "{{ (groups['masters']|length|int > 1) | ternary('atomic-openshift-master-api','atomic-openshift-master') }}"
+    name: "{{ (groups['masters']|length|int > 1 or openshift_version | float >= 3.7) | ternary('atomic-openshift-master-api','atomic-openshift-master') }}"
     state: restarted
   delegate_to: "{{ item['_ansible_delegated_vars']['ansible_delegated_host'] }}"
   with_items: "{{ master_config_result.results }}"

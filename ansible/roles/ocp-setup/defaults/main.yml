@@ -3,6 +3,7 @@
 gpg_core_files_dir: "{{ playbook_dir }}/gpg_remote/gpg_config"
 gpg_core_files_remote_dir: "~/.gpg-openshift"
 gpg_publickey_file: "openshift@example.com"
+openshift_version: 3.7
 openshift_image_management_project_name: image-management
 openshift_image_management_project_display_name: Image Management
 openshift_image_management_node_label: "image_management=true"

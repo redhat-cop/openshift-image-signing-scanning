@@ -125,8 +125,8 @@ objects:
 
       [plugin_imagesigner]
       registries=docker-registry.default.svc:5000
-      template_name=sign-image-template
-      signer_identity=openshift@example.com
+      template_name=${TEMPLATE_NAME}
+      signer_identity=${SIGN_BY}
   kind: ConfigMap
   metadata:
     name: ${APPLICATION_NAME}
@@ -181,3 +181,13 @@ parameters:
   description: Node Selector Value for the Job
   value: "true"
   required: true
+- description: Name of the template to instantiate
+  displayName: Template Name
+  name: TEMPLATE_NAME
+  required: true
+  value: sign-image-template
+- description: GPG Signer
+  displayName: Sign by
+  name: SIGN_BY
+  required: true
+  value: openshift@example.com
