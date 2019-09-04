@@ -1,7 +1,7 @@
 OpenShift Container Platform Image Signing and Image Scanning
 ========================================
 
-_This repository is currently undergoing active development. Functionality may be in flux_
+**NOTICE: This repository is no longer being maintained. Please see [image-scanning-signing-service](https://github.com/redhat-cop/image-scanning-signing-service)***
 
 ## Overview
 
